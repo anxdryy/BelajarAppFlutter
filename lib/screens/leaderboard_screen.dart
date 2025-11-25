@@ -3,7 +3,11 @@ import '../models/leaderboard_model.dart';
 import '../services/api_service.dart';
 
 class LeaderboardScreen extends StatefulWidget {
-  const LeaderboardScreen({super.key});
+  // Tambahkan variabel token
+  final String token; 
+  
+  // Wajibkan token saat dipanggil
+  const LeaderboardScreen({super.key, required this.token});
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -15,76 +19,114 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   void initState() {
     super.initState();
-    futureLeaderboard = ApiService().fetchLeaderboard();
+    // Kirim token yang didapat dari widget ke API Service
+    futureLeaderboard = ApiService().fetchLeaderboard(widget.token);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Papan Peringkat Mingguan')),
+      appBar: AppBar(
+        title: const Text('Papan Peringkat'),
+        backgroundColor: Colors.deepPurple,
+        elevation: 0,
+      ),
       body: FutureBuilder<List<LeaderboardEntry>>(
         future: futureLeaderboard,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return Center(child: Text('Error memuat: ${snapshot.error}'));
-          } else if (snapshot.hasData) {
+            return Center(child: Text('Gagal memuat: ${snapshot.error}'));
+          } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
             final leaderboard = snapshot.data!;
             
-            // Mencari user saat ini untuk ditampilkan di bagian atas (seperti di video)
+            // Cari data user yang login (untuk ditampilkan paling atas)
             final currentUserEntry = leaderboard.firstWhere(
                 (e) => e.isCurrentUser, 
-                orElse: () => LeaderboardEntry(rank: 0, displayName: "Anda", weeklyXp: 0));
+                orElse: () => LeaderboardEntry(rank: 0, displayName: "Anda", weeklyXp: 0, isCurrentUser: true));
 
-            return ListView(
+            return Column(
               children: [
-                // Bagian Peringkat Anda
-                _buildCurrentUserRank(currentUserEntry),
-                
-                const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Text('20 Teratas Minggu Ini', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                // Widget Spesial: Peringkat Saya
+                if (currentUserEntry.rank != 0) 
+                  _buildCurrentUserRank(currentUserEntry),
+
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      const Text('Top Global', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                      const SizedBox(height: 10),
+                      
+                      // Mapping List
+                      ...leaderboard.map((entry) {
+                        return Card(
+                          elevation: entry.isCurrentUser ? 4 : 1,
+                          color: entry.isCurrentUser ? Colors.yellow.shade50 : Colors.white,
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: _getRankColor(entry.rank), // Warna beda buat juara 1,2,3
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '#${entry.rank}', 
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: entry.rank <= 3 ? Colors.white : Colors.black)
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              entry.displayName,
+                              style: TextStyle(fontWeight: entry.isCurrentUser ? FontWeight.bold : FontWeight.normal),
+                            ),
+                            trailing: Text('${entry.weeklyXp} XP', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                          ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
                 ),
-                
-                // Daftar Leaderboard
-                ...leaderboard.map((entry) {
-                  return ListTile(
-                    leading: Text('#${entry.rank}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                    title: Text('${entry.displayName} ${entry.isCurrentUser ? '(Anda)' : ''}'),
-                    trailing: Text('${entry.weeklyXp} XP', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    tileColor: entry.isCurrentUser ? Colors.yellow.shade100 : null,
-                  );
-                }).toList(),
               ],
             );
           }
-          return const Center(child: Text('Tidak ada data peringkat.'));
+          return const Center(child: Text('Belum ada data peringkat.'));
         },
       ),
     );
   }
 
+  // Helper untuk warna piala (Juara 1 Emas, 2 Perak, 3 Perunggu)
+  Color _getRankColor(int rank) {
+    if (rank == 1) return Colors.amber; // Emas
+    if (rank == 2) return Colors.grey;  // Perak
+    if (rank == 3) return Colors.brown.shade300; // Perunggu
+    return Colors.grey.shade200; // Biasa
+  }
+
   Widget _buildCurrentUserRank(LeaderboardEntry entry) {
-    return Card(
-      margin: const EdgeInsets.all(16.0),
-      color: Colors.blue.shade50,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Peringkat Anda', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('#${entry.rank} (${entry.displayName})', style: const TextStyle(fontSize: 20, color: Colors.blue)),
-                Text('${entry.weeklyXp} XP', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.deepPurple.shade50,
+        border: Border(bottom: BorderSide(color: Colors.deepPurple.shade100)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Peringkat Anda:', style: TextStyle(fontSize: 16)),
+          Row(
+            children: [
+              Text('#${entry.rank}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+              const SizedBox(width: 10),
+              Text('${entry.weeklyXp} XP', style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          )
+        ],
       ),
     );
   }

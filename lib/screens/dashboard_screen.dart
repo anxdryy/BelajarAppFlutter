@@ -132,7 +132,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Navigator.pop(context);
                 Navigator.of(context).push(
                   MaterialPageRoute(
-                    builder: (context) => const LeaderboardScreen(),
+                    // KITA KIRIM TOKEN DARI CURRENT USER KE SINI
+                    builder: (context) => LeaderboardScreen(token: currentUser.token),
                   ),
                 );
               },
@@ -148,12 +149,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // LOGIKA LEVEL:
+                  // 0-99 XP = Level 1
+                  // 100-199 XP = Level 2, dst.
+                  // Rumus: (XP dibagi 100) + 1
                   Text(
-                    'Level: ${currentUser.totalXp ~/ 100}',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                    'Level: ${(currentUser.totalXp ~/ 100) + 1}', 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                   ),
-                  Text('Kontunan harian: ${currentUser.streakCount} hari'),
+                  const SizedBox(height: 4),
+                  
+                  // LOGIKA STREAK
+                  Row(
+                    children: [
+                      const Icon(Icons.local_fire_department, color: Colors.orange, size: 20),
+                      const SizedBox(width: 4),
+                      Text('Kontunan harian: ${currentUser.streakCount} hari'),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  
+                  // INFO TOTAL XP
                   Text('Total XP: ${currentUser.totalXp} XP'),
+                  
+                  // PROGRESS BAR MENUJU LEVEL BERIKUTNYA (Opsional, biar keren)
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: LinearProgressIndicator(
+                      // Menghitung sisa XP (Modulus)
+                      // Contoh: 85 XP -> 0.85 (85%)
+                      value: (currentUser.totalXp % 100) / 100, 
+                      backgroundColor: Colors.grey.shade300,
+                      color: Colors.deepPurple,
+                      minHeight: 6,
+                    ),
+                  ),
+                  Text(
+                    '${100 - (currentUser.totalXp % 100)} XP lagi naik level',
+                    style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                  ),
                 ],
               ),
             ),

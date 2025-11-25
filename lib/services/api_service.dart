@@ -123,16 +123,23 @@ class ApiService {
   // --- 3. LEADERBOARD ---
 
   // FUNGSI INI AKAN MENGEMBALIKAN Future<List<LeaderboardEntry>>
-  Future<List<LeaderboardEntry>> fetchLeaderboard() async {
-    // Anda harus membuat endpoint leaderboard.php di backend
-    final response = await http.get(Uri.parse('$baseUrl/leaderboard.php'));
+  Future<List<LeaderboardEntry>> fetchLeaderboard(String token) async {
+    final url = Uri.parse('$baseUrl/leaderboard.php');
+    
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token', // Kirim Token di sini
+      },
+    );
     
     if (response.statusCode == 200) {
-      final List jsonList = json.decode(response.body)['data']; 
-      // Dart sekarang mengenal LeaderboardEntry karena import di atas sudah ada
-      return jsonList.map((json) => LeaderboardEntry.fromJson(json)).toList();
+      final jsonResponse = json.decode(response.body);
+      final List data = jsonResponse['data']; 
+      return data.map((json) => LeaderboardEntry.fromJson(json)).toList();
     } else {
-      throw Exception('Gagal memuat papan peringkat. Pastikan leaderboard.php dibuat.');
+      throw Exception('Gagal memuat papan peringkat.');
     }
   }
 

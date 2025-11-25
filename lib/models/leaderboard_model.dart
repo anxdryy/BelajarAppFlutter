@@ -1,5 +1,3 @@
-// File: lib/models/leaderboard_model.dart
-
 class LeaderboardEntry {
   final int rank;
   final String displayName;
@@ -10,15 +8,15 @@ class LeaderboardEntry {
     required this.rank,
     required this.displayName,
     required this.weeklyXp,
-    this.isCurrentUser = false,
+    required this.isCurrentUser,
   });
 
   factory LeaderboardEntry.fromJson(Map<String, dynamic> json) {
     return LeaderboardEntry(
-      rank: json['rank'] ?? 0,
-      displayName: json['display_name'] ?? 'Anonim',
-      weeklyXp: json['weekly_xp'] ?? 0,
-      isCurrentUser: json['is_user'] ?? false,
+      rank: int.parse(json['rank'].toString()),
+      displayName: json['display_name'] ?? 'User',
+      weeklyXp: int.parse(json['weekly_xp'].toString()),
+      isCurrentUser: json['is_current_user'] ?? false,
     );
   }
 }
