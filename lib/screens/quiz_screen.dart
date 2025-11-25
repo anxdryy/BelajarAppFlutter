@@ -237,7 +237,7 @@ class _QuizScreenState extends State<QuizScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
           onPressed: answers.length == questions.length ? _submitQuiz : null,
-          child: const Text("Kirim Jawaban", style: TextStyle(fontSize: 18)),
+          child: const Text("Kirim Jawaban", style: TextStyle(fontSize: 18, color: Colors.white)),
         ),
       ),
     );
