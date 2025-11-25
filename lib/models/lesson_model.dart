@@ -3,7 +3,7 @@ class Lesson {
   final String title;
   final int lessonOrder;
   final int xpValue;
-  final bool isCompleted; 
+  bool isCompleted; 
 
   Lesson({
     required this.id,

@@ -87,6 +87,39 @@ class ApiService {
     }
   }
 
+  // --- TAMBAHKAN FUNGSI INI DI DALAM CLASS ApiService ---
+  
+  // Fungsi untuk menyimpan progress ke database (Menembak update_progress.php)
+  Future<bool> updateProgress(String token, int lessonId) async {
+    final url = Uri.parse('$baseUrl/update_progress.php'); 
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token', // Kirim token untuk validasi user
+        },
+        body: jsonEncode({
+          'lesson_id': lessonId, // Data ID pelajaran yang diselesaikan
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        // Berhasil disimpan (HTTP 200)
+        return true; 
+      } else {
+        // Gagal dari server (misal HTTP 400/401/500)
+        print('Gagal update progress: ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      // Gagal koneksi / error lain
+      print('Error koneksi updateProgress: $e');
+      return false;
+    }
+  }
+
   // --- 3. LEADERBOARD ---
 
   // FUNGSI INI AKAN MENGEMBALIKAN Future<List<LeaderboardEntry>>

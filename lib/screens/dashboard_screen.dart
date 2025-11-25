@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import '../models/course_model.dart';
 import '../models/lesson_model.dart';
 import '../models/user_model.dart'; // Wajib di-import
@@ -6,6 +8,8 @@ import '../services/api_service.dart';
 import 'profile_screen.dart';
 import 'leaderboard_screen.dart';
 import 'auth_screen.dart';
+import 'lesson_detail_screen.dart';
+import 'quiz_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   final User user;
@@ -198,39 +202,69 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  bool isCourse1Passed = false;
   // === HELPER WIDGETS ===
 
   // Fungsi untuk membangun setiap bagian Course (Dasar 1: Perkenalan)
   Widget _buildCourseSection(BuildContext context, Course course) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 16.0, bottom: 8.0),
-          child: Text(
-            course.title,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: Colors.deepPurple,
-            ),
-          ),
-        ),
-        // Daftar Lesson di bawah Course
-        ...course.lessons
-            .map((lesson) => _buildLessonTile(context, lesson))
-            .toList(),
+   bool isLocked = false;
+    if (course.id == 2) {
+      // Kita perlu mengecek data dari Course 1 yang sudah dimuat sebelumnya
+      // Karena agak rumit mengambil data antar widget, kita bisa pakai trik sederhana:
+      // Kita cek Global Variable atau Logic pass di snapshot data.
+      
+      // Asumsi: Data course urut 1, 2. 
+      // Kita bisa cek variable global/state yang disimpan saat build Course 1.
+      if (!isCourse1Passed) {
+        isLocked = true;
+      }
+    }
 
-        // Tambahkan Ujian Akhir (Quiz) jika ada (Sesuai Struktur Data MySQL Anda)
-        if (course.id == 1) // Asumsi Quiz hanya ada di Course ID 1
-          _buildQuizTile(context, 'Ujian Akhir: Dasar 1'),
-      ],
+    // Jika Course 1, kita simpan status kelulusannya ke variabel untuk dipakai Course 2
+    if (course.id == 1 && course.quiz != null) {
+        // FutureBuilder membangun widget berulang kali, 
+        // pastikan ini tidak menyebabkan infinite loop set state.
+        // Cara aman: Set nilai boolean biasa tanpa setState saat build
+        isCourse1Passed = course.quiz!.isPassed;
+    }
+
+    return Opacity(
+      opacity: isLocked ? 0.5 : 1.0, // Jadikan transparan jika terkunci
+      child: AbsorbPointer( // Mencegah klik jika terkunci
+        absorbing: isLocked, 
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Judul Course
+            Padding(
+              padding: const EdgeInsets.only(top: 16, bottom: 8),
+              child: Row(
+                children: [
+                  Text(course.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.deepPurple)),
+                  if (isLocked) const Padding(
+                    padding: EdgeInsets.only(left: 8.0),
+                    child: Icon(Icons.lock, color: Colors.grey),
+                  )
+                ],
+              ),
+            ),
+
+            // List Lesson
+            ...course.lessons.map((lesson) => _buildLessonTile(context, lesson)).toList(),
+
+            // Tampilkan QUIZ TILE jika ada
+            if (course.quiz != null)
+              // Kita kirim Objek Quiz-nya, DAN ID Course-nya
+              _buildQuizTile(context, course.quiz!, course.id),
+          ],
+        ),
+      ),
     );
   }
 
   // Komponen List Tile untuk setiap Lesson (Alfabet Jari A-E, F-J, dst.)
   Widget _buildLessonTile(BuildContext context, Lesson lesson) {
-    // Sesuaikan warna latar belakang berdasarkan status isCompleted (hijau atau abu-abu/putih)
+    // Tentukan warna berdasarkan status selesai
     Color tileColor = lesson.isCompleted ? Colors.green.shade100 : Colors.white;
 
     return Card(
@@ -244,36 +278,112 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         title: Text(lesson.title),
         trailing: Text('${lesson.xpValue} XP'),
-        onTap: () {
-          // Aksi: Navigasi ke Lesson Detail Screen
-          ScaffoldMessenger.of(
+        onTap: () async {
+          // 1. Navigasi ke halaman materi
+          final result = await Navigator.push(
             context,
-          ).showSnackBar(SnackBar(content: Text('Membuka ${lesson.title}')));
+            MaterialPageRoute(
+              builder: (context) => LessonDetailScreen(lesson: lesson),
+            ),
+          );
+
+          // 2. Jika user kembali dan membawa sinyal 'true' (Selesai Membaca)
+          if (result == true) {
+            
+            // Cek dulu, kalau di HP belum centang hijau, baru kita proses
+            if (!lesson.isCompleted) {
+              
+              // Tampilkan notifikasi kecil di bawah (SnackBar) bahwa sedang memproses
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Menyimpan progres...'),
+                  duration: Duration(milliseconds: 800),
+                ),
+              );
+
+              // 3. PANGGIL API (Tanpa Popup Debug)
+              bool success = await ApiService().updateProgress(currentUser.token, lesson.id);
+
+              // 4. JIKA SUKSES, LANGSUNG UPDATE UI (AUTO REFRESH)
+              if (success) {
+                setState(() {
+                  // A. Ubah icon jadi centang hijau
+                  lesson.isCompleted = true;
+
+                  // B. Tambah XP User secara langsung di layar
+                  currentUser = User(
+                    id: currentUser.id,
+                    displayName: currentUser.displayName,
+                    email: currentUser.email,
+                    // Tambahkan XP lama dengan XP pelajaran ini
+                    totalXp: currentUser.totalXp + lesson.xpValue, 
+                    streakCount: currentUser.streakCount,
+                    profileImageUrl: currentUser.profileImageUrl,
+                    token: currentUser.token,
+                  );
+                });
+
+                // Tampilkan pesan sukses
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Hore! +${lesson.xpValue} XP ditambahkan!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } else {
+                // Jika gagal koneksi/server error
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Gagal menyimpan. Cek koneksi internet.'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            } else {
+              // Jika materi sudah pernah diselesaikan sebelumnya
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Materi ini sudah Anda selesaikan.')),
+              );
+            }
+          }
         },
       ),
     );
   }
 
   // Komponen untuk Ujian Akhir
-  Widget _buildQuizTile(BuildContext context, String title) {
+  Widget _buildQuizTile(BuildContext context, Quiz quiz, int courseId) {
+    bool isPassed = quiz.isPassed;
+
     return Card(
-      color: Colors.red.shade50,
+      color: isPassed ? Colors.green.shade100 : Colors.red.shade50,
       margin: const EdgeInsets.only(bottom: 8.0),
-      elevation: 1,
       child: ListTile(
-        leading: Icon(Icons.assignment, color: Colors.red.shade700),
-        title: Text(
-          title,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.red,
-          ),
+        leading: Icon(
+          isPassed ? Icons.check_circle : Icons.quiz, 
+          color: isPassed ? Colors.green : Colors.red
         ),
-        onTap: () {
-          // Aksi: Navigasi ke Quiz Screen
-          ScaffoldMessenger.of(
+        title: Text(quiz.title),
+        subtitle: Text(isPassed ? "Lulus (Nilai: ${quiz.userScore})" : "Min. Nilai: 80"),
+        trailing: isPassed ? const Text("Selesai") : const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: () async {
+          // Buka Halaman Quiz
+          await Navigator.push(
             context,
-          ).showSnackBar(const SnackBar(content: Text('Membuka Ujian')));
+            MaterialPageRoute(
+              builder: (context) => QuizScreen(
+                courseId: courseId, // Sekarang variable ini SUDAH DIKENALI
+                quizInfo: quiz,     
+                token: currentUser.token,
+              ),
+            ),
+          );
+          
+          // Refresh Dashboard setelah balik dari Quiz
+          _refreshUserData(); 
+          setState(() {
+             futureCourses = ApiService().fetchCourses(currentUser.token);
+          });
         },
       ),
     );
