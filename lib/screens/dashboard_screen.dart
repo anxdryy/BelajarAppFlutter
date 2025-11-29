@@ -22,7 +22,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   late Future<List<Course>> futureCourses;
   late User currentUser;
-
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   // Asumsi data user disimpan secara lokal setelah login
   // Nanti, data ini akan diambil dari hasil login API
 
@@ -64,175 +64,208 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Jalur Pembelajaran'),
-        elevation: 0,
-        // Tombol hamburger untuk membuka Drawer
-      ),
-      // Struktur Sidebar (Drawer) - Sesuai Video
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Colors.deepPurple.shade700),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Profil Ringkas di Sidebar
-                  const CircleAvatar(
-                    radius: 30,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.person, size: 40),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    currentUser.displayName,
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  Text(
-                    currentUser.email,
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            // Menu Navigasi Sesuai Video
-            ListTile(
-              leading: const Icon(Icons.dashboard),
-              title: const Text('Jalur Pembelajaran'),
-              selected: true, // Karena sedang berada di screen ini
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Profil'),
-              onTap: () async {
-                // <-- 1. JADIKAN ASYNC
-                Navigator.pop(context); // Tutup drawer terlebih dahulu
+      key: _scaffoldKey,
+      backgroundColor: const Color(0xFFF5F6FC), // Background abu-abu sangat muda (biar kartu pop-up)
+      
+      // --- DRAWER TETAP ADA TAPI KITA SEMBUNYIKAN TOMBOLNYA DI HEADER CUSTOM ---
+      drawer: _buildDrawer(),
 
-                // 2. TUNGGU HASIL DARI PROFILESCREEN
-                // Aplikasi akan 'pause' di sini sampai ProfileScreen ditutup
-                final result = await Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => ProfileScreen(user: currentUser),
-                  ),
-                );
+      body: Column(
+        children: [
+          // --- 1. HEADER CUSTOM (MIRIP REFERENSI) ---
+          _buildCustomHeader(),
 
-                // 3. JIKA HASILNYA 'true' (artinya ada update), PANGGIL FUNGSI REFRESH
-                if (result == true) {
-                  _refreshUserData();
+          // --- 2. BODY CONTENT (LIST PELAJARAN) ---
+          Expanded(
+            child: FutureBuilder<List<Course>>(
+              future: futureCourses,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return Center(child: Text('Gagal memuat: ${snapshot.error}'));
+                } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                  return ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    children: snapshot.data!.map((course) {
+                      return _buildCourseSection(context, course);
+                    }).toList(),
+                  );
                 }
+                return const Center(child: Text('Belum ada kursus.'));
               },
             ),
-            ListTile(
-              leading: const Icon(Icons.emoji_events),
-              title: const Text('Papan Peringkat'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    // KITA KIRIM TOKEN DARI CURRENT USER KE SINI
-                    builder: (context) => LeaderboardScreen(token: currentUser.token),
-                  ),
-                );
-              },
-            ),
-            const Divider(),
-
-            // Informasi XP dan Streak di Sidebar
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16.0,
-                vertical: 8.0,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // LOGIKA LEVEL:
-                  // 0-99 XP = Level 1
-                  // 100-199 XP = Level 2, dst.
-                  // Rumus: (XP dibagi 100) + 1
-                  Text(
-                    'Level: ${(currentUser.totalXp ~/ 100) + 1}', 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                  const SizedBox(height: 4),
-                  
-                  // LOGIKA STREAK
-                  Row(
-                    children: [
-                      const Icon(Icons.local_fire_department, color: Colors.orange, size: 20),
-                      const SizedBox(width: 4),
-                      Text('Kontunan harian: ${currentUser.streakCount} hari'),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  
-                  // INFO TOTAL XP
-                  Text('Total XP: ${currentUser.totalXp} XP'),
-                  
-                  // PROGRESS BAR MENUJU LEVEL BERIKUTNYA (Opsional, biar keren)
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      // Menghitung sisa XP (Modulus)
-                      // Contoh: 85 XP -> 0.85 (85%)
-                      value: (currentUser.totalXp % 100) / 100, 
-                      backgroundColor: Colors.grey.shade300,
-                      color: Colors.deepPurple,
-                      minHeight: 6,
-                    ),
-                  ),
-                  Text(
-                    '${100 - (currentUser.totalXp % 100)} XP lagi naik level',
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-            ),
-            // Tombol Logout (Sesuai Video)
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Logout', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                // Navigasi ke AuthScreen dan hapus semua rute sebelumnya dari tumpukan
-                Navigator.of(context).pushAndRemoveUntil(
-                  // Buat rute baru ke AuthScreen
-                  MaterialPageRoute(builder: (context) => const AuthScreen()),
-
-                  // Predikat (route) => false akan menghapus SEMUA rute sebelumnya.
-                  (Route<dynamic> route) => false,
-                );
-              },
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
 
-      // KODE FUTUREBUILDER UNTUK COURSES
-      body: FutureBuilder<List<Course>>(
-        future: futureCourses,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            // Error ini akan muncul jika get_courses.php belum dibuat atau error
-            return Center(
-              child: Text('Gagal memuat jalur pembelajaran: ${snapshot.error}'),
-            );
-          } else if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-            return ListView(
-              padding: const EdgeInsets.all(16.0),
-              // Membangun daftar Course (Dasar 1, Dasar 2, dst.)
-              children: snapshot.data!.map((course) {
-                return _buildCourseSection(context, course);
-              }).toList(),
-            );
-          }
-          return const Center(child: Text('Belum ada kursus yang tersedia.'));
-        },
+  // --- WIDGET HEADER BARU (DESAIN UNGU MELENGKUNG) ---
+  Widget _buildCustomHeader() {
+    return Container(
+      padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 30),
+      decoration: const BoxDecoration(
+        color: Color(0xFF6A5AE0), // Warna Ungu Utama
+        borderRadius: BorderRadius.only(
+          bottomLeft: Radius.circular(30),
+          bottomRight: Radius.circular(30),
+        ),
+        boxShadow: [
+          BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))
+        ]
+      ),
+      child: Column(
+        children: [
+          // Baris Atas: Menu & Notifikasi (Opsional)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white),
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              ),
+              const Text(
+                "Dashboard Belajar",
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 48), // Spacer biar title tengah
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Baris Profil: Avatar & Nama
+          Row(
+            children: [
+              // Avatar
+              Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: CircleAvatar(
+                  radius: 30,
+                  backgroundColor: Colors.white,
+                  backgroundImage: currentUser.profileImageUrl != null 
+                      ? NetworkImage(currentUser.profileImageUrl!) 
+                      : null,
+                  child: currentUser.profileImageUrl == null 
+                      ? const Icon(Icons.person, size: 35, color: Color(0xFF6A5AE0)) 
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 15),
+              // Nama & Email
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      currentUser.displayName,
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      currentUser.email,
+                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 25),
+
+          // Baris Statistik (Level, Streak, XP) - Mirip bagian "Buckets" di referensi
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatItem("Level", "${(currentUser.totalXp ~/ 100) + 1}"),
+              _buildVerticalDivider(),
+              _buildStatItem("Streak", "${currentUser.streakCount} Hari"),
+              _buildVerticalDivider(),
+              _buildStatItem("Total XP", "${currentUser.totalXp}"),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVerticalDivider() {
+    return Container(height: 30, width: 1, color: Colors.white.withOpacity(0.3));
+  }
+
+  // --- DRAWER ASLI (Hanya Dipoles Sedikit) ---
+  Widget _buildDrawer() {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(color: Color(0xFF6A5AE0)),
+            accountName: Text(currentUser.displayName, style: const TextStyle(fontWeight: FontWeight.bold)),
+            accountEmail: Text(currentUser.email),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Text(currentUser.displayName[0].toUpperCase(), style: const TextStyle(fontSize: 24, color: Color(0xFF6A5AE0))),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.dashboard, color: Color(0xFF6A5AE0)),
+            title: const Text('Jalur Pembelajaran'),
+            selected: true,
+            selectedTileColor: const Color(0xFF6A5AE0).withOpacity(0.1),
+            onTap: () => Navigator.pop(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person),
+            title: const Text('Profil'),
+            onTap: () async {
+              Navigator.pop(context);
+              final result = await Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => ProfileScreen(user: currentUser)),
+              );
+              if (result == true) _refreshUserData();
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.emoji_events),
+            title: const Text('Papan Peringkat'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => LeaderboardScreen(token: currentUser.token)),
+              );
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text('Logout', style: TextStyle(color: Colors.red)),
+            onTap: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => const AuthScreen()),
+                (Route<dynamic> route) => false,
+              );
+            },
+          ),
+        ],
       ),
     );
   }
